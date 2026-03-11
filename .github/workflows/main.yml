@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       agent_name:
-        description: 'Ayyet'
+        description: 'Nama Agent'
         required: true
         default: 'ayye'
       agent_description:
-        description: 'Ayye AI Agent'
+        description: 'Deskripsi Agent'
         required: true
         default: 'ayye AI Agent'
 
@@ -26,35 +26,31 @@ jobs:
           node-version: '24'
 
       - name: Install ClawHub skill
-        run: npx clawhub@latest install verified-agent-identity
+        run: npx clawhub@latest install verified-agent-identity || echo "ClawHub install exited non-zero - check if rate limited or skill unavailable"
 
-      - name: Debug - Show folder structure after install
+      - name: Debug folder structure
         run: |
-          echo "Current dir: $(pwd)"
+          pwd
           ls -la
-          if [ -d "skills" ]; then
-            ls -laR skills
+          if [ -d "skills/verified-agent-identity" ]; then
+            echo "Skill folder exists"
+            ls -laR skills/verified-agent-identity
           else
-            echo "skills/ folder NOT created - install failed!"
-          fi
-
-      - name: Install dependencies in scripts folder
-        run: |
-          if [ -d "skills/verified-agent-identity/scripts" ]; then
-            cd skills/verified-agent-identity/scripts
-            npm install
-            echo "npm install completed"
-          else
-            echo "Error: skills/verified-agent-identity/scripts not found!"
-            ls -laR skills || true
+            echo "skills/verified-agent-identity NOT created - install likely failed"
             exit 1
           fi
 
-      - name: Create Ethereum Identity (with debug)
+      - name: Install dependencies
+        run: |
+          cd skills/verified-agent-identity/scripts || { echo "scripts folder missing"; exit 1; }
+          npm install || { echo "npm install failed"; exit 1; }
+          echo "Dependencies installed"
+
+      - name: Create Ethereum Identity
         run: |
           cd skills/verified-agent-identity/scripts || exit 1
-          echo "Running createNewEthereumIdentity.js..."
-          node createNewEthereumIdentity.js || echo "Creation skipped (likely already exists or non-fatal)"
+          echo "Attempting to create identity..."
+          node createNewEthereumIdentity.js && echo "Identity created" || echo "Creation skipped or failed (may already exist)"
 
       - name: Link Human to Agent
         run: |
@@ -63,9 +59,8 @@ jobs:
           AGENT_NAME="${{ github.event.inputs.agent_name }}"
           AGENT_DESC="${{ github.event.inputs.agent_description }}"
 
-          # jq safe JSON creation
-          CHALLENGE=$(jq -n --arg name "$AGENT_NAME" --arg desc "$AGENT_DESC" '{name: $name, description: $desc}')
+          CHALLENGE=$(jq -n --arg name "$AGENT_NAME" --arg desc "$AGENT_DESC" '{name: $name, description: $desc}') || { echo "jq failed"; exit 1; }
 
-          echo "Challenge JSON: $CHALLENGE"
+          echo "Challenge: $CHALLENGE"
 
-          node manualLinkHumanToAgent.js --challenge "$CHALLENGE" || echo "Link failed - check if identity exists or needs manual env vars"
+          node manualLinkHumanToAgent.js --challenge "$CHALLENGE" || echo "Link step failed - likely needs interactive wallet or env vars; check output for link"
