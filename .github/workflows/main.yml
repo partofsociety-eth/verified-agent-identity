@@ -1,66 +1,65 @@
 name: Verify Human Identity
-
-on:
-  workflow_dispatch:
-    inputs:
-      agent_name:
-        description: 'ayye'
-        required: true
-        default: 'ayye'
-      agent_description:
-        description: 'ayye AI Agebt'
-        required: true
+on:  
+  workflow_dispatch:    
+    inputs:      
+      agent_name:        
+        description: 'Agent Name'        
+        required: true        
+        default: 'ayye'      
+      agent_description:        
+        description: 'Agent Description'        
+        required: true        
         default: 'ayye AI Agent'
 
-jobs:
-  verify:
-    runs-on: ubuntu-latest
+jobs:  
+  verify:    
+    runs-on: ubuntu-latest    
+    steps:      
+      - name: Checkout repository        
+        uses: actions/checkout@v4 # Gunakan versi stabil v4
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
+      - name: Setup Node.js 20 # Node 20 lebih stabil untuk kebanyakan package saat ini
+        uses: actions/setup-node@v4        
+        with:          
+          node-version: '20'
 
-      - name: Setup Node.js 24
-        uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-
-      - name: Install ClawHub skill
-        run: npx clawhub@latest install verified-agent-identity || echo "ClawHub install exited non-zero - check if rate limited or skill unavailable"
-
-      - name: Debug folder structure
+      - name: Install ClawHub & Skill
         run: |
-          pwd
-          ls -la
-          if [ -d "skills/verified-agent-identity" ]; then
-            echo "Skill folder exists"
-            ls -laR skills/verified-agent-identity
-          else
-            echo "skills/verified-agent-identity NOT created - install likely failed"
+          # Paksa install di direktori kerja saat ini
+          npx -y clawhub@latest install verified-agent-identity
+          
+      - name: Check and Install Dependencies
+        run: |
+          # Cari folder scripts secara dinamis jika struktur berubah
+          TARGET_DIR=$(find . -type d -name "scripts" | grep "verified-agent-identity" | head -n 1)
+          if [ -z "$TARGET_DIR" ]; then
+            echo "Error: Scripts folder not found!"
             exit 1
           fi
-
-      - name: Install dependencies
-        run: |
-          cd skills/verified-agent-identity/scripts || { echo "scripts folder missing"; exit 1; }
-          npm install || { echo "npm install failed"; exit 1; }
-          echo "Dependencies installed"
+          echo "Found scripts at: $TARGET_DIR"
+          cd "$TARGET_DIR"
+          npm install
+          # Simpan path untuk step berikutnya
+          echo "SCRIPT_PATH=$TARGET_DIR" >> $GITHUB_ENV
 
       - name: Create Ethereum Identity
+        env:
+          CI: true # Memberitahu Node bahwa ini lingkungan robot
         run: |
-          cd skills/verified-agent-identity/scripts || exit 1
-          echo "Attempting to create identity..."
-          node createNewEthereumIdentity.js && echo "Identity created" || echo "Creation skipped or failed (may already exist)"
+          cd "${{ env.SCRIPT_PATH }}"
+          # Gunakan --yes atau flag non-interaktif jika tersedia di script tersebut
+          node createNewEthereumIdentity.js || echo "Identity already exists or failed, moving on..."
 
       - name: Link Human to Agent
+        env:
+          CI: true
+          AGENT_NAME: ${{ github.event.inputs.agent_name }}
+          AGENT_DESC: ${{ github.event.inputs.agent_description }}
         run: |
-          cd skills/verified-agent-identity/scripts || exit 1
-
-          AGENT_NAME="${{ github.event.inputs.agent_name }}"
-          AGENT_DESC="${{ github.event.inputs.agent_description }}"
-
-          CHALLENGE=$(jq -n --arg name "$AGENT_NAME" --arg desc "$AGENT_DESC" '{name: $name, description: $desc}') || { echo "jq failed"; exit 1; }
-
-          echo "Challenge: $CHALLENGE"
-
-          node manualLinkHumanToAgent.js --challenge "$CHALLENGE" || echo "Link step failed - likely needs interactive wallet or env vars; check output for link"
+          cd "${{ env.SCRIPT_PATH }}"
+          # Membuat JSON challenge dengan aman
+          CHALLENGE=$(jq -n --arg name "$AGENT_NAME" --arg desc "$AGENT_DESC" '{name: $name, description: $desc}')
+          echo "Processing Challenge: $CHALLENGE"
+          
+          # Eksekusi script. Jika butuh Private Key, pastikan sudah di-set di Secrets!
+          node manualLinkHumanToAgent.js --challenge "$CHALLENGE"
