@@ -1,43 +1,59 @@
-name: Verify Human Identity
+name: Billions Network Agent Verification
 on:
   workflow_dispatch:
+    inputs:
+      agent_name:
+        description: 'Nama Agent'
+        required: true
+        default: 'ayye'
+      agent_description:
+        description: 'Deskripsi Agent'
+        required: true
+        default: 'ayye AI Agent'
 
 jobs:
-  verify:
+  verify-identity:
     runs-on: ubuntu-latest
     env:
-      # Memaksa GitHub Actions menggunakan Node.js 24 sesuai saran peringatan
+      # Mengatasi peringatan depresiasi Node 20
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-    
+      # Agar script tidak menunggu input manual (Non-Interactive)
+      CI: true 
+
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4 # Tetap v4, tapi dijalankan di Node 24 oleh env di atas
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
       - name: Setup Node.js 24
         uses: actions/setup-node@v4
         with:
-          node-version: '24' # Update ke versi 24
+          node-version: '24'
 
       - name: Install Dependencies
         run: |
           cd scripts
           npm install
 
-      - name: Create and Link Identity
+      - name: Execute Verification
         env:
+          # Pastikan kamu sudah isi ini di GitHub Secrets!
           PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
-          AGENT_NAME: "ayye"
-          AGENT_DESC: "ayye AI Agent"
-          CI: true # Mode non-interaktif
+          AGENT_NAME: ${{ github.event.inputs.agent_name }}
+          AGENT_DESC: ${{ github.event.inputs.agent_description }}
         run: |
           cd scripts
           
-          # Gunakan 'yes' untuk bypass konfirmasi prompt (Y/N)
-          # Dan printf untuk menyuplai input teks otomatis
-          yes | printf "$AGENT_NAME\n$AGENT_DESC\n" | node createNewEthereumIdentity.js || echo "Identity setup finished"
+          # 1. Buat Ethereum Identity (Otomatis jawab 'y' jika ditanya)
+          echo "Step 1: Creating Identity..."
+          yes | node createNewEthereumIdentity.js || echo "Identity already exists"
 
-          # Buat Challenge JSON
+          # 2. Buat Challenge JSON dengan JQ
           CHALLENGE=$(jq -n --arg name "$AGENT_NAME" --arg desc "$AGENT_DESC" '{name: $name, description: $desc}')
-          
-          # Eksekusi Linking
+          echo "Challenge Data: $CHALLENGE"
+
+          # 3. Linking Human to Agent
+          # Kita suapi input Nama dan Deskripsi lewat pipe agar tidak 'hang'
+          echo "Step 2: Linking Agent..."
           printf "$AGENT_NAME\n$AGENT_DESC\n" | node manualLinkHumanToAgent.js --challenge "$CHALLENGE"
+          
+          echo "Verification Process Completed!"
