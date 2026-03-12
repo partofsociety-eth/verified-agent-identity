@@ -16,8 +16,7 @@ jobs:
     runs-on: ubuntu-latest    
     steps:      
       - name: Checkout repository        
-        uses: actions/checkout@v4 # Gunakan versi stabil v4
-
+        uses: actions/checkout@v4
       - name: Setup Node.js 20 # Node 20 lebih stabil untuk kebanyakan package saat ini
         uses: actions/setup-node@v4        
         with:          
@@ -25,12 +24,10 @@ jobs:
 
       - name: Install ClawHub & Skill
         run: |
-          # Paksa install di direktori kerja saat ini
           npx -y clawhub@latest install verified-agent-identity
           
       - name: Check and Install Dependencies
         run: |
-          # Cari folder scripts secara dinamis jika struktur berubah
           TARGET_DIR=$(find . -type d -name "scripts" | grep "verified-agent-identity" | head -n 1)
           if [ -z "$TARGET_DIR" ]; then
             echo "Error: Scripts folder not found!"
@@ -39,7 +36,6 @@ jobs:
           echo "Found scripts at: $TARGET_DIR"
           cd "$TARGET_DIR"
           npm install
-          # Simpan path untuk step berikutnya
           echo "SCRIPT_PATH=$TARGET_DIR" >> $GITHUB_ENV
 
       - name: Create Ethereum Identity
@@ -47,7 +43,6 @@ jobs:
           CI: true # Memberitahu Node bahwa ini lingkungan robot
         run: |
           cd "${{ env.SCRIPT_PATH }}"
-          # Gunakan --yes atau flag non-interaktif jika tersedia di script tersebut
           node createNewEthereumIdentity.js || echo "Identity already exists or failed, moving on..."
 
       - name: Link Human to Agent
@@ -57,9 +52,7 @@ jobs:
           AGENT_DESC: ${{ github.event.inputs.agent_description }}
         run: |
           cd "${{ env.SCRIPT_PATH }}"
-          # Membuat JSON challenge dengan aman
           CHALLENGE=$(jq -n --arg name "$AGENT_NAME" --arg desc "$AGENT_DESC" '{name: $name, description: $desc}')
           echo "Processing Challenge: $CHALLENGE"
           
-          # Eksekusi script. Jika butuh Private Key, pastikan sudah di-set di Secrets!
           node manualLinkHumanToAgent.js --challenge "$CHALLENGE"
