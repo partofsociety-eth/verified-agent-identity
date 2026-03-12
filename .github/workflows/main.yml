@@ -1,58 +1,42 @@
 name: Verify Human Identity
-on:  
-  workflow_dispatch:    
-    inputs:      
-      agent_name:        
-        description: 'Agent Name'        
-        required: true        
-        default: 'ayye'      
-      agent_description:        
-        description: 'Agent Description'        
-        required: true        
-        default: 'ayye AI Agent'
+on:
+  workflow_dispatch:
 
-jobs:  
-  verify:    
-    runs-on: ubuntu-latest    
-    steps:      
-      - name: Checkout repository        
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Setup Node.js 20 # Node 20 lebih stabil untuk kebanyakan package saat ini
-        uses: actions/setup-node@v4        
-        with:          
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
           node-version: '20'
 
-      - name: Install ClawHub & Skill
+      - name: Install Dependencies
         run: |
-          npx -y clawhub@latest install verified-agent-identity
-          
-      - name: Check and Install Dependencies
-        run: |
-          TARGET_DIR=$(find . -type d -name "scripts" | grep "verified-agent-identity" | head -n 1)
-          if [ -z "$TARGET_DIR" ]; then
-            echo "Error: Scripts folder not found!"
-            exit 1
-          fi
-          echo "Found scripts at: $TARGET_DIR"
-          cd "$TARGET_DIR"
+          # Masuk ke folder scripts dan install package
+          cd scripts
           npm install
-          echo "SCRIPT_PATH=$TARGET_DIR" >> $GITHUB_ENV
 
-      - name: Create Ethereum Identity
+      - name: Create and Link Identity
         env:
-          CI: true # Memberitahu Node bahwa ini lingkungan robot
+          # Pastikan kamu sudah menambah PRIVATE_KEY di Settings > Secrets > Actions
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          AGENT_NAME: "ayye"
+          AGENT_DESC: "ayye AI Agent"
         run: |
-          cd "${{ env.SCRIPT_PATH }}"
-          node createNewEthereumIdentity.js || echo "Identity already exists or failed, moving on..."
-
-      - name: Link Human to Agent
-        env:
-          CI: true
-          AGENT_NAME: ${{ github.event.inputs.agent_name }}
-          AGENT_DESC: ${{ github.event.inputs.agent_description }}
-        run: |
-          cd "${{ env.SCRIPT_PATH }}"
-          CHALLENGE=$(jq -n --arg name "$AGENT_NAME" --arg desc "$AGENT_DESC" '{name: $name, description: $desc}')
-          echo "Processing Challenge: $CHALLENGE"
+          cd scripts
           
-          node manualLinkHumanToAgent.js --challenge "$CHALLENGE"
+          # 1. Buat Identity secara otomatis
+          # Jika script meminta konfirmasi (y/n), kita gunakan 'yes' command
+          yes | node createNewEthereumIdentity.js || echo "Identity setup finished"
+
+          # 2. Buat Challenge JSON
+          CHALLENGE=$(jq -n --arg name "$AGENT_NAME" --arg desc "$AGENT_DESC" '{name: $name, description: $desc}')
+          echo "Challenge created: $CHALLENGE"
+
+          # 3. Link Human to Agent secara Otomatis
+          # Kita gunakan printf untuk menyuapi input jika script meminta nama/deskripsi secara manual
+          printf "$AGENT_NAME\n$AGENT_DESC\n" | node manualLinkHumanToAgent.js --challenge "$CHALLENGE"
