@@ -5,38 +5,39 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    env:
+      # Memaksa GitHub Actions menggunakan Node.js 24 sesuai saran peringatan
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4 # Tetap v4, tapi dijalankan di Node 24 oleh env di atas
 
-      - name: Setup Node.js
+      - name: Setup Node.js 24
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24' # Update ke versi 24
 
       - name: Install Dependencies
         run: |
-          # Masuk ke folder scripts dan install package
           cd scripts
           npm install
 
       - name: Create and Link Identity
         env:
-          # Pastikan kamu sudah menambah PRIVATE_KEY di Settings > Secrets > Actions
           PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
           AGENT_NAME: "ayye"
           AGENT_DESC: "ayye AI Agent"
+          CI: true # Mode non-interaktif
         run: |
           cd scripts
           
-          # 1. Buat Identity secara otomatis
-          # Jika script meminta konfirmasi (y/n), kita gunakan 'yes' command
-          yes | node createNewEthereumIdentity.js || echo "Identity setup finished"
+          # Gunakan 'yes' untuk bypass konfirmasi prompt (Y/N)
+          # Dan printf untuk menyuplai input teks otomatis
+          yes | printf "$AGENT_NAME\n$AGENT_DESC\n" | node createNewEthereumIdentity.js || echo "Identity setup finished"
 
-          # 2. Buat Challenge JSON
+          # Buat Challenge JSON
           CHALLENGE=$(jq -n --arg name "$AGENT_NAME" --arg desc "$AGENT_DESC" '{name: $name, description: $desc}')
-          echo "Challenge created: $CHALLENGE"
-
-          # 3. Link Human to Agent secara Otomatis
-          # Kita gunakan printf untuk menyuapi input jika script meminta nama/deskripsi secara manual
+          
+          # Eksekusi Linking
           printf "$AGENT_NAME\n$AGENT_DESC\n" | node manualLinkHumanToAgent.js --challenge "$CHALLENGE"
